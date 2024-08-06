@@ -488,9 +488,10 @@ function AdminTenderDetails() {
                                                     <td>{new Date(data.createdAt).toLocaleString()}</td>
                                                     <td>
                                                         {data.fileUrls && data.fileUrls.length > 0 ? (
-                                                            <Button variant="primary" onClick={() => handleSaveFilesClick(data)}>
-                                                                Save All Files
-                                                            </Button>
+                                                            // <Button variant="primary" onClick={() => handleSaveFilesClick(data)}></Button>
+                                                                <a href={data.fileUrls[0]}>Save File</a>
+                                                                
+                                                           
                                                         ) : null}
                                                     </td>
                                                     <td>

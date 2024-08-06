@@ -79,18 +79,21 @@ function TenderDetailuser() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [fileExtension, setFileExtension] = useState('');
   const [isFileSelected, setIsFileSelected] = useState(false);
-  const [url, setUrl] = useState('');
+  let [url, setUrl] = useState('');
   const [folderName, setFolderName] = useState('');
-  const [key, setKey] = useState('')
+  let [key, setKey] = useState('')
+  const [tender, setTender] = useState('')
 
-  const handleFileChange = (event) => {
+  const handleFileChange = async (event) => {
     const file1 = event.target.files[0]
     if (file1) {
       const fileExtension = file1.name
       setSelectedFile(file1);
       setFileExtension(fileExtension);
-      let arr1 = triggerFunction(fileExtension, folderName)
-      console.log(arr1)
+      let arr1 = await triggerFunction(fileExtension, tender)
+      console.log(arr1, tender)
+      url = arr1[0]
+      key = arr1[1]
       setUrl(arr1[0]);
       setKey(arr1[1])
       setIsFileSelected(true);
@@ -104,9 +107,10 @@ function TenderDetailuser() {
 
 
   const [tenderId, setTenderId] = useState(null); // <-- add this line
-  const handleButtonClick = (tenderId,) => {
+  const handleButtonClick = (tenderId, tname) => {
     //console.log(tenderId);
     setTenderId(tenderId); // <-- add this line
+    setTender(tname)
     // You now have the tenderId here. You can use it to make your API call.
     setShowModal(true);
     // //console.log(tenderId);
@@ -137,73 +141,85 @@ function TenderDetailuser() {
 
   const handleUpload = async (event) => {
     event.preventDefault();
-    // // upload to S3
+
     if (!selectedFile) {
       Swal.fire('Error', 'Please Select file', 'error');
       return;
     }
-    const token = localStorage.getItem('token');
 
+    // Show loader
+    Swal.fire({
+      title: 'Uploading...',
+      html: 'Please wait while we upload your file.',
+      allowOutsideClick: false,
+      onOpen: () => {
+        Swal.showLoading();
+      }
+    });
+
+    const token = localStorage.getItem('token');
     const reader = new FileReader();
+
     reader.onload = async (event) => {
       const fileContent = event.target.result;
 
-
-      console.log('Selected File Extension:', fileExtension);
-      console.log('File Content:', fileContent);
-
       try {
-
+        // Upload to S3
         const responseFile = await fetch(url, {
           method: 'PUT',
           body: fileContent,
           headers: {
-            'Content-Type': 'application/octet-stream', // Set appropriate content type
+            'Content-Type': 'application/octet-stream',
           },
-          mode: 'cors', // Enable CORS
+          mode: 'cors',
         });
+
         if (!responseFile.ok) {
           throw new Error('Network response was not ok');
         }
-        console.log('File uploaded successfully:', responseFile);
-        // Reload page after successful submission
-        // window.location.reload();
 
-        // Clear form data after submission
-        tenderId(''); // clear folder name
+        console.log('File uploaded successfully:', responseFile);
+
+        // Upload to MongoDB
+        const body = {
+          tenderId: tenderId,
+          file: getPredefinedUrl(key),
+        };
+
+        const res = await axios.post(`${baseurl}/api/upload`, body, {
+          headers: {
+            Authorization: ` ${localStorage.getItem('token')}`,
+          },
+        });
+
+        // Hide loader and show success message
+        Swal.fire({
+          title: 'Success!',
+          text: 'File uploaded successfully.',
+          icon: 'success',
+          confirmButtonText: 'OK'
+        });
+
+        // Clear form data
+        setTenderId(''); // clear folder name
         setFile(null); // clear file
+
+        setShowModal(false);
 
       } catch (error) {
         console.error('Error:', error);
+
+        // Hide loader and show error message
+        Swal.fire({
+          title: 'Error!',
+          text: 'There was a problem uploading the file.',
+          icon: 'error',
+          confirmButtonText: 'OK'
+        });
       }
     };
 
     reader.readAsArrayBuffer(selectedFile);
-
-    // Upload to MongoDB
-
-    const body = {
-      // formData.append('files', selectedFiles[i]);
-      // formData.append('tenderId', tenderId); // <-- add this line
-      tenderId: tenderId,
-      file: getPredefinedUrl(key)
-
-    }
-
-    try {
-      const res = await axios.post(`${baseurl}/api/upload`, body, {
-        headers: {
-
-          Authorization: ` ${localStorage.getItem('token')}`
-        }
-      });
-      //console.log(res.data);
-      setShowModal(false);
-    } catch (error) {
-      console.error(error);
-    }
-    // };
-
   };
 
 
@@ -298,9 +314,16 @@ function TenderDetailuser() {
                       </a>
                     </td>
                     <td>
-                      <a href={item.name.doc} download>
+                      {/* <a href={item.name.docs} download>
                         Download Document
-                      </a>
+                      </a> */}
+                       <ul style={{ listStyleType: 'none' }}>
+                          {(item.name.docs).map((document, index) => (
+                            <li key={index} style={{ marginBottom: '5px', paddingLeft: '20px', textIndent: '-15px' }}>
+                              • <a style={{ textDecoration: "underline" }} href={document.url}>{document.name.replace(/\+/g, ' ')}</a>
+                            </li>
+                          ))}
+                        </ul>
                     </td>
                     <td>{item.name.ward}</td>
                     <td>{item.name.cts_number}</td>
@@ -309,7 +332,7 @@ function TenderDetailuser() {
                     <td>
                       {item && (item.paid ? (
                         <button style={{ backgroundColor: "#4CAF50", color: "white", padding: "14px 20px", margin: "8px 0", border: "none", cursor: "pointer", width: "100%" }}
-                          onClick={() => handleButtonClick(item._id)}
+                          onClick={() => handleButtonClick(item._id, item.name.title)}
                         >
                           upload
                         </button>
